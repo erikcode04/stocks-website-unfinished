@@ -143,6 +143,9 @@ module.exports = (client, config) => {
 
 
   router.get("/getUserInfo", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).send("You are not authenticated");
+    }
     try{
       const user = req.user
    const profilePicture = user.profilePicture;  
@@ -160,12 +163,7 @@ catch(error)
 
   })
 
-  router.get("/getOtherUserProfilePic", async (req, res) => {
-    /*
-    if (!req.isAuthenticated()) {
-      return res.status(401).send('You are not authenticated');
-    }
-    */
+  router.get("/getOtherUser", async (req, res) => { 
     try {
       const {userName} = req.query;
       const db = client.db(config.name);
@@ -189,6 +187,7 @@ catch(error)
 
 
   router.post("/findUser", async (req, res) => {  
+
     try {
     const {userName} = req.body;
    const db = client.db(config.name);
@@ -205,6 +204,9 @@ catch(error)
     });
 
     router.post("/changeDescription",async (req, res) => {
+      if (!req.isAuthenticated()) {
+        return res.status(401).send("You are not authenticated");
+      }
    try {
    const userId = req.user._id;
     const {description} = req.body;
@@ -223,6 +225,9 @@ catch(error)
     });
 
     router.post("/addStocks", async(req, res) => {
+      if (!req.isAuthenticated()) {
+        return res.status(401).send("You are not authenticated");
+      }
       const date = new Date();
      const year = date.getFullYear();
      const month = 1 + date.getMonth();
@@ -250,29 +255,8 @@ catch(error)
     console.error(error);
     res.status(500).send("An error occurred while updating the stock list");
   }
-    })
+    });
 
-
-    
-router.get("/getStockList", async (req, res) => {
-  try{
-const userId = req.user;
-console.log(userId);
-console.log("start");
-console.log(userId);
-const db = client.db(config.name);
-const usersCollection = db.collection(config.loginCollection);
-const existingUser = await usersCollection.findOne({ userId });
-console.log(existingUser);
-const stockLists = existingUser.stockLists;
-const food = "boy"
-console.log("end");
-res.status(200).send(food)
-  }
-  catch(error){
-res.status(414).send("failed to get stockLists")
-  }
-});
 
 
   router.get("/checkAuth", (req, res) => {
