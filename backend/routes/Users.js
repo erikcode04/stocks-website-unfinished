@@ -89,15 +89,190 @@ module.exports = (client, config) => {
           console.log("Error hashing password", err);
           return res.status(500).send("Internal Server Error");
         }
-        await usersCollection.insertOne({ userName, hash, profilePicture, description, stockLists });
+        await usersCollection.insertOne({ userName, hash, profilePicture, description, stockLists, friends, friendRequests, SentFriendRequests});
         res.status(200).send("Signup successful!");
       });
     } catch (error) {
       console.error("Error signing up:", error);
       res.status(500).send("Error signing up");
+      return;
     }
   });
+
+
+
+  router.get("/getFriends", async (req, res) => {
+
+
+try {
+
+    const friends = req.user.friends;
+    const friendRequests = req.user.friendRequests;
+    const SentFriendRequests = req.user.SentFriendRequests;
+   const friendList = [];
+   const friendRequestsList = [];
+   const SentFriendRequestsList = []
   
+   
+
+    const usersCollection = await connectToDb();
+
+
+  if (friends.length > 0) {
+    for (let index = 0; index < friends.length; index++) {
+      const userName = friends[index];
+      const user = await usersCollection.findOne({ userName : userName });
+      const userDetails = {
+        userName : userName,
+        profilePicture : user.profilePicture
+      }
+      friendList.push(userDetails);
+    }
+  }
+  
+
+  if (friendRequests.length > 0) {
+    for (let index = 0; index < friendRequests.length; index++) {
+      const userName = friendRequests[index];
+      const user = await usersCollection.findOne({ userName : userName });
+      const userDetails = {
+        userName : userName,
+        profilePicture : user.profilePicture
+      }
+     
+      friendRequestsList.push(userDetails);
+    }
+  }
+ 
+
+  if (SentFriendRequests.length > 0) {
+    for (let index = 0; index < SentFriendRequests.length; index++) {
+      const userName = SentFriendRequests[index];
+      const user = await usersCollection.findOne({ userName : userName });
+      const userDetails = {
+        userName : userName,
+        profilePicture : user.profilePicture
+      }
+      SentFriendRequestsList.push(userDetails);
+    }
+  }
+   console.log(friendList);
+   console.log(friendRequestsList);
+   console.log(SentFriendRequestsList);
+   
+res.send({friendList, friendRequestsList, SentFriendRequestsList});
+return;
+}
+catch(error){
+  res.send(error)
+}
+
+
+
+  })
+
+
+
+
+
+  
+
+  router.post("/changeFriends", async (req, res) => {
+  const userName = req.user.userName;
+  const otherUserName = req.body.profileName;
+
+  if (otherUserName === userName) {
+    res.send("Lmao thats u bro, You cant add yourself:)")
+    return;
+  }
+  const userId = req.user._id;
+  const usersCollection = await connectToDb();
+   const user = await usersCollection.findOne( { userName: userName} );
+   const otherUser = await usersCollection.findOne( { userName: otherUserName});
+  const otherUserId = otherUser._id;
+
+  let friendStatus = false;
+  let SentFriendRequestStatus = false;
+
+   if (user.friends.length !== 0) {
+    for (let index = 0; index < user.friends.length; index++) {
+      const suspectFriend = user.friends[index];
+      if (suspectFriend === otherUserName) {
+        await usersCollection.updateOne(
+          { _id: userId},
+          { $pull: { friends: otherUserName } });
+
+
+          await usersCollection.updateOne(
+            { _id: otherUserId},
+            { $pull: { friends: userName } });
+
+            res.send({friendStatus, SentFriendRequestStatus});
+            return;
+      }
+    }
+   }
+
+
+
+   if(!user.friendRequests.length !== 0){
+   for (let index = 0; index < user.friendRequests.length; index++) {
+    const element = user.friendRequests[index];
+    if(otherUserName === element){
+         await usersCollection.updateOne(
+        { _id: userId},
+        { $pull: { friendRequests: otherUserName } });
+
+           await usersCollection.updateOne(
+          { _id: userId},
+          { $push: { friends: otherUserName } });
+
+          await usersCollection.updateOne(
+            { _id: otherUserId},
+            { $pull: { SentFriendRequests: userName } });
+
+            await usersCollection.updateOne(
+              { _id: otherUserId},
+              { $push: { friends: userName } });
+
+             friendStatus = true;
+          res.send({friendStatus, SentFriendRequestStatus});
+          return;
+    }
+   }
+  }
+
+  if (user.SentFriendRequests.length > 0) {
+    for (let index = 0; index < user.SentFriendRequests.length; index++) {
+     const suspectUser = user.SentFriendRequests[index];
+     if (suspectUser === otherUserName) {
+       await usersCollection.updateOne(
+         { _id: userId},
+         { $pull: { SentFriendRequests: otherUserName } });
+  
+         await usersCollection.updateOne(
+           { _id: otherUserId},
+           { $pull: { friendRequests : userName } });
+ 
+         res.send({friendStatus, SentFriendRequestStatus});
+         return;
+     }
+    }
+   }
+
+
+    await usersCollection.updateOne(
+    { _id: userId},
+    { $push: { SentFriendRequests: otherUserName } });
+
+    await usersCollection.updateOne(
+      { _id: otherUserId},
+      { $push: { friendRequests: userName } });
+   
+      SentFriendRequestStatus = true;
+    res.send({friendStatus, SentFriendRequestStatus});
+    return;
+  })
 
   router.post("/imageHandler", upload.single("profilePicture") , async (req, res) => {
     if (!req.isAuthenticated()) {
@@ -152,6 +327,7 @@ module.exports = (client, config) => {
    const userName = user.userName; 
    const description = user.description;
    const stockLists = user.stockLists
+   
 
    res.send({profilePicture, userName, description, stockLists});
     }
@@ -169,15 +345,60 @@ catch(error)
       const db = client.db(config.name);
       const usersCollection = db.collection(config.loginCollection);
       const user = await usersCollection.findOne( {userName} );
+    
+
       const profilPicture = user.profilePicture;
       console.log(profilPicture);
       const nameOfUser = user.userName;
       const description = user.description;
       const stockLists = user.stockLists;
+
       if (!user) {
         return res.status(404).send('No profile info found');
       }
-      res.send({profilPicture, nameOfUser, description, stockLists});
+
+      let friendStatus = false;
+      let friendRequestStatus = false;
+      let SentFriendRequestStatus = false;
+      
+     const loggedInProfile = req.user;
+     if (loggedInProfile.friends.length !== 0) {
+    
+      for (let index = 0; index < loggedInProfile.friends.length; index++) {
+        const suspectFriend = loggedInProfile.friends[index];
+        if (suspectFriend === nameOfUser) {
+          friendStatus = true;
+          res.send({profilPicture, nameOfUser, description, stockLists, friendStatus, friendRequestStatus, friendRequestStatus});
+          return;
+        }
+      }
+     }
+
+     if (loggedInProfile.friendRequests.length !== 0) {
+    
+      for (let index = 0; index < loggedInProfile.friendRequests.length; index++) {
+        const suspectFriendRequest = loggedInProfile.friendRequests[index];
+        if (suspectFriendRequest === nameOfUser) {
+          friendRequestStatus = true;
+          res.send({profilPicture, nameOfUser, description, stockLists, friendStatus, friendRequestStatus, SentFriendRequestStatus});
+          return;
+        }
+      }
+     }
+
+     if (loggedInProfile.SentFriendRequests.length !== 0) {
+    
+      for (let index = 0; index < loggedInProfile.SentFriendRequests.length; index++) {
+        const suspectSentFriendRequest = loggedInProfile.SentFriendRequests[index];
+        if (suspectSentFriendRequest === nameOfUser) {
+          SentFriendRequestStatus = true;
+          res.send({profilPicture, nameOfUser, description, stockLists, friendStatus, friendRequestStatus, SentFriendRequestStatus});
+          return
+        }
+      }
+     }
+    
+      res.send({profilPicture, nameOfUser, description, stockLists, friendStatus, friendRequestStatus, SentFriendRequestStatus});
     } catch (error) {
       console.error('Error getting profile picture:', error);
       res.status(500).send('Internal Server Error');
@@ -197,6 +418,7 @@ catch(error)
     return res.status(414).send("Could not find User");
    }
     res.status(200).json({userName : userName});
+
 
     }catch(error){
       console.log("heh");
